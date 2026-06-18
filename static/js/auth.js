@@ -74,6 +74,7 @@
             headers: { 'Authorization': 'Bearer ' + token }
         }).finally(function() {
             try { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_user'); } catch (e) {}
+            document.cookie = 'auth_token=; path=/; max-age=0';
             location.replace('/static/login.html');
         });
     };

@@ -302,6 +302,9 @@
                     const data = await resp.json();
                     localStorage.setItem('auth_token', data.token);
                     localStorage.setItem('auth_user', JSON.stringify(data.user));
+                    // 同时写入 cookie（这样 / 路由才能识别登录态）
+                    // 5 年有效期
+                    document.cookie = 'auth_token=' + data.token + '; path=/; max-age=' + (5*365*24*60*60) + '; SameSite=Lax';
                     // 如果必须改密码，先跳改密页
                     if (data.user.must_change_password) {
                         location.replace('/static/change-password.html?first=1');
