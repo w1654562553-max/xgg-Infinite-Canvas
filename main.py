@@ -74,6 +74,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # --- WebSocket 状态管理器 ---
 class ConnectionManager:
     def __init__(self):
@@ -196,6 +197,12 @@ async def startup_event():
         await asyncio.to_thread(migrate_mislabeled_image_extensions)
     except Exception as exc:
         print(f"纠正图片扩展名失败: {exc}")
+    # 初始化用户认证系统（首次启动会创建 admin 账号，并把现有 data/ 数据迁到 admin 数据目录）
+    try:
+        import auth
+        auth.ensure_admin()
+    except Exception as exc:
+        print(f"用户系统初始化失败: {exc}")
 
 @app.websocket("/ws/stats")
 async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
@@ -239,6 +246,100 @@ PROMPT_LIBRARY_PATH = os.path.join(DATA_DIR, "prompt_libraries.json")
 API_PROVIDERS_FILE = os.path.join(DATA_DIR, "api_providers.json")
 RUNNINGHUB_WORKFLOW_STORE_FILE = os.path.join(DATA_DIR, "runninghub_workflows.json")
 SHARED_FOLDERS_FILE = os.path.join(DATA_DIR, "shared_folders.json")
+
+# --- 多用户数据隔离中间件 ---
+# 在每个请求到达业务代码前，根据 Authorization 头里的 token 切换 DATA_DIR 等全局路径，
+# 让 main 模块里所有 DATA_DIR/CANVAS_DIR/... 的引用都指向当前用户的独立数据目录。
+
+import contextvars
+import importlib
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
+# 保存 main 模块原始路径变量的备份（启动时记录一次）
+_BASE_DATA_DIR = DATA_DIR
+_BASE_CONVERSATION_DIR = CONVERSATION_DIR
+_BASE_CANVAS_DIR = CANVAS_DIR
+_BASE_MEDIA_PREVIEW_DIR = MEDIA_PREVIEW_DIR
+_BASE_ASSET_LIBRARY_PATH = ASSET_LIBRARY_PATH
+_BASE_PROMPT_LIBRARY_PATH = PROMPT_LIBRARY_PATH
+_BASE_API_PROVIDERS_FILE = API_PROVIDERS_FILE
+_BASE_RUNNINGHUB_WORKFLOW_STORE_FILE = RUNNINGHUB_WORKFLOW_STORE_FILE
+_BASE_SHARED_FOLDERS_FILE = SHARED_FOLDERS_FILE
+
+
+def _switch_data_dir(user_id: str):
+    """切换 main 模块的全局路径变量到指定用户的数据目录"""
+    import main as _main_module
+    user_data = os.path.join(_BASE_DATA_DIR, "users", user_id)
+    os.makedirs(user_data, exist_ok=True)
+    _main_module.DATA_DIR = user_data
+    _main_module.CONVERSATION_DIR = os.path.join(user_data, "conversations")
+    _main_module.CANVAS_DIR = os.path.join(user_data, "canvases")
+    _main_module.MEDIA_PREVIEW_DIR = os.path.join(user_data, "media_previews")
+    _main_module.ASSET_LIBRARY_PATH = os.path.join(user_data, "asset_library.json")
+    _main_module.PROMPT_LIBRARY_PATH = os.path.join(user_data, "prompt_libraries.json")
+    _main_module.API_PROVIDERS_FILE = os.path.join(user_data, "api_providers.json")
+    _main_module.RUNNINGHUB_WORKFLOW_STORE_FILE = os.path.join(user_data, "runninghub_workflows.json")
+    _main_module.SHARED_FOLDERS_FILE = os.path.join(user_data, "shared_folders.json")
+    # 也切换 auth 模块（admin API 要用用户列表）
+    import auth as _auth_module
+    _auth_module.DATA_DIR = user_data
+    # 确保目录存在
+    for sub in ("conversations", "canvases", "media_previews"):
+        os.makedirs(os.path.join(user_data, sub), exist_ok=True)
+
+
+def _restore_data_dir():
+    """恢复 main 模块的全局路径到启动时的状态（用于未登录请求）"""
+    import main as _main_module
+    _main_module.DATA_DIR = _BASE_DATA_DIR
+    _main_module.CONVERSATION_DIR = _BASE_CONVERSATION_DIR
+    _main_module.CANVAS_DIR = _BASE_CANVAS_DIR
+    _main_module.MEDIA_PREVIEW_DIR = _BASE_MEDIA_PREVIEW_DIR
+    _main_module.ASSET_LIBRARY_PATH = _BASE_ASSET_LIBRARY_PATH
+    _main_module.PROMPT_LIBRARY_PATH = _BASE_PROMPT_LIBRARY_PATH
+    _main_module.API_PROVIDERS_FILE = _BASE_API_PROVIDERS_FILE
+    _main_module.RUNNINGHUB_WORKFLOW_STORE_FILE = _BASE_RUNNINGHUB_WORKFLOW_STORE_FILE
+    _main_module.SHARED_FOLDERS_FILE = _BASE_SHARED_FOLDERS_FILE
+
+
+class _UserDataDirMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # 不需要鉴权的路径：直接放行，DATA_DIR 保持默认（即 data/）
+        path = request.url.path
+        public_paths = ("/api/login", "/api/logout", "/api/me", "/api/me/password", "/static/")
+        # /api/me 是查询当前用户信息，不涉及数据，所以也不需要切换
+        # 但是 /api/login 需要能读到 users.json，所以不能切换（保持默认 data/）
+        if path.startswith("/static/") or path in ("/api/login", "/api/logout", "/api/me", "/api/me/password"):
+            return await call_next(request)
+        # 管理员管理用户接口也要保持默认（要访问 users.json）
+        if path.startswith("/api/admin/"):
+            return await call_next(request)
+        # 其他 API 需要鉴权 + 切换数据目录
+        token = request.headers.get("authorization", "")
+        if token.lower().startswith("bearer "):
+            token = token[7:].strip()
+        else:
+            token = ""
+        if not token:
+            token = request.cookies.get("auth_token", "")
+        if token:
+            import auth as _auth_module
+            payload = _auth_module.lookup_token(token)
+            if payload:
+                user = _auth_module.get_user_by_id(payload["user_id"])
+                if user:
+                    _switch_data_dir(user["id"])
+                    try:
+                        return await call_next(request)
+                    finally:
+                        _restore_data_dir()
+        # 无 token 或 token 无效：默认切到 admin 数据（兜底）
+        import auth as _auth_module
+        admin_user = _auth_module.get_user_by_username("admin")
+        if admin_user:
+            _switch_data_dir(admin_user["id"])
 GLOBAL_CONFIG_FILE = os.path.join(BASE_DIR, "global_config.json")
 CANVAS_TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 LOCAL_IMAGE_IMPORT_MAX_BYTES = int(os.getenv("LOCAL_IMAGE_IMPORT_MAX_BYTES", str(50 * 1024 * 1024)))
@@ -8832,8 +8933,27 @@ async def build_chat_text_reply(payload, conversation):
 # --- 路由接口 ---
 
 @app.get("/")
-async def index():
-    return static_html_response("index.html")
+async def index(request: Request):
+    """未登录返回登录页，已登录返回主页"""
+    try:
+        import auth as _auth
+        # 从 cookie 或 header 里拿 token
+        token = request.cookies.get("auth_token")
+        if not token:
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header[7:].strip()
+        user = None
+        if token:
+            payload = _auth.lookup_token(token)
+            if payload:
+                user = _auth.get_user_by_id(payload["user_id"])
+        if not user:
+            return static_html_response("login.html")
+        return static_html_response("index.html")
+    except Exception:
+        # 出错时也返回登录页（安全兜底）
+        return static_html_response("login.html")
 
 @app.get("/api/view")
 def view_image(filename: str, type: str = "input", subfolder: str = ""):
@@ -14824,6 +14944,13 @@ def run_workflow(name: str, payload: WorkflowRunRequest):
         client_id=payload.client_id or str(uuid.uuid4()),
     )
     return generate(req)
+
+# --- 挂载用户认证路由 ---
+try:
+    import auth as _auth_module
+    app.include_router(_auth_module.auth_router)
+except Exception as exc:
+    print(f"挂载用户认证路由失败: {exc}")
 
 if __name__ == "__main__":
     import uvicorn

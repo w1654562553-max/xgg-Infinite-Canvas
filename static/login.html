@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/static/images/logo.png" type="image/png">
+    <title>登录 - AI Studio</title>
+    <script src="/static/vendor/js/tailwindcss-cdn.js?v=2026.06.18.1781685818"></script>
+    <script src="/static/js/theme.js?v=2026.06.18.1781685818"></script>
+    <style>
+        @import url('/static/vendor/css/fonts.css?v=2026.06.18.1781685818');
+
+        :root {
+            --accent: #000000;
+            --fluid-ease: cubic-bezier(0.3, 0, 0, 1);
+            --bg: #ffffff;
+            --sidebar-bg: #ffffff;
+            --stage-bg: #fcfcfc;
+            --border: #f2f2f2;
+            --stage-border: #f0f0f0;
+            --text: #121212;
+            --muted: #999;
+            --nav-hover-bg: #fafafa;
+            --monitor-bg: rgba(255, 255, 255, 0.7);
+            --monitor-border: rgba(0, 0, 0, 0.05);
+            --monitor-shadow: rgba(0, 0, 0, 0.04);
+            --divider: rgba(0, 0, 0, 0.1);
+            --scrollbar: #d8d8d8;
+            --scrollbar-hover: #c0c0c0;
+            --author-name: #000;
+            --social-icon: #ccc;
+        }
+
+        html.theme-dark,
+        body.theme-dark {
+            --bg: #0f141d;
+            --sidebar-bg: #0f141d;
+            --stage-bg: #111722;
+            --border: #242d3b;
+            --stage-border: #2a3444;
+            --text: #e5e9f0;
+            --muted: #8f9aab;
+            --nav-hover-bg: #171d29;
+            --monitor-bg: rgba(23, 29, 41, 0.82);
+            --monitor-border: rgba(255, 255, 255, 0.08);
+            --monitor-shadow: rgba(0, 0, 0, 0.3);
+            --divider: rgba(255, 255, 255, 0.15);
+            --scrollbar: #334155;
+            --scrollbar-hover: #475569;
+            --author-name: #e5e9f0;
+            --social-icon: #64748b;
+        }
+
+        body {
+            background: var(--bg);
+            font-family: 'Space Grotesk', sans-serif;
+            color: var(--text);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 48px 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.06);
+            animation: card-enter 0.6s var(--fluid-ease);
+        }
+
+        html.theme-dark .login-card,
+        body.theme-dark .login-card {
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        }
+
+        @keyframes card-enter {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-logo {
+            width: 56px;
+            height: 56px;
+            border: 2px solid var(--text);
+            border-radius: 16px;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 28px;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .login-title {
+            font-size: 22px;
+            font-weight: 600;
+            text-align: center;
+            margin: 0 0 8px;
+            color: var(--text);
+        }
+
+        .login-subtitle {
+            font-size: 13px;
+            color: var(--muted);
+            text-align: center;
+            margin: 0 0 32px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            box-sizing: border-box;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--text);
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+        }
+
+        html.theme-dark .form-input:focus,
+        body.theme-dark .form-input:focus {
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--text);
+            color: var(--bg);
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        .login-btn:hover:not(:disabled) {
+            opacity: 0.88;
+        }
+
+        .login-btn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .login-error {
+            background: rgba(220, 38, 38, 0.08);
+            color: #dc2626;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            margin-top: 12px;
+            text-align: center;
+            display: none;
+        }
+
+        html.theme-dark .login-error,
+        body.theme-dark .login-error {
+            color: #f87171;
+        }
+
+        .login-tip {
+            font-size: 11px;
+            color: var(--muted);
+            text-align: center;
+            margin-top: 24px;
+            line-height: 1.6;
+        }
+
+        .login-tip code {
+            background: var(--nav-hover-bg);
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Menlo, monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-logo">AI</div>
+        <h1 class="login-title">AI Studio</h1>
+        <p class="login-subtitle">登录后继续访问</p>
+
+        <form id="loginForm">
+            <div class="form-group">
+                <label class="form-label" for="username">用户名</label>
+                <input
+                    class="form-input"
+                    type="text"
+                    id="username"
+                    name="username"
+                    autocomplete="username"
+                    required
+                    placeholder="请输入用户名"
+                />
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="password">密码</label>
+                <input
+                    class="form-input"
+                    type="password"
+                    id="password"
+                    name="password"
+                    autocomplete="current-password"
+                    required
+                    placeholder="请输入密码"
+                />
+            </div>
+            <button type="submit" class="login-btn" id="loginBtn">登录</button>
+            <div class="login-error" id="loginError"></div>
+        </form>
+
+        <p class="login-tip">
+            管理员账号 <code>admin</code>，初始密码 <code>123</code>，首次登录后请立即修改。
+        </p>
+    </div>
+
+    <script>
+        (function() {
+            // 如果已经登录，直接跳到首页
+            try {
+                const token = localStorage.getItem('auth_token');
+                if (token) {
+                    fetch('/api/me', { headers: { 'Authorization': 'Bearer ' + token } })
+                        .then(r => {
+                            if (r.ok) {
+                                location.replace('/');
+                            }
+                        })
+                        .catch(() => {});
+                }
+            } catch (e) {}
+
+            const form = document.getElementById('loginForm');
+            const btn = document.getElementById('loginBtn');
+            const err = document.getElementById('loginError');
+            const usernameInput = document.getElementById('username');
+
+            function showError(msg) {
+                err.textContent = msg;
+                err.style.display = 'block';
+            }
+
+            function hideError() {
+                err.style.display = 'none';
+            }
+
+            form.addEventListener('submit', async function(ev) {
+                ev.preventDefault();
+                hideError();
+                btn.disabled = true;
+                btn.textContent = '登录中…';
+                const username = usernameInput.value.trim();
+                const password = document.getElementById('password').value;
+                try {
+                    const resp = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password }),
+                    });
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        throw new Error(data.detail || '登录失败');
+                    }
+                    const data = await resp.json();
+                    localStorage.setItem('auth_token', data.token);
+                    localStorage.setItem('auth_user', JSON.stringify(data.user));
+                    // 如果必须改密码，先跳改密页
+                    if (data.user.must_change_password) {
+                        location.replace('/static/change-password.html?first=1');
+                    } else {
+                        location.replace('/');
+                    }
+                } catch (e) {
+                    showError(e.message || '登录失败');
+                    btn.disabled = false;
+                    btn.textContent = '登录';
+                }
+            });
+
+            // 自动聚焦
+            if (!usernameInput.value) usernameInput.focus();
+        })();
+    </script>
+</body>
+</html>
