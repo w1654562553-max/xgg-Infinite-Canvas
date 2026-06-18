@@ -1592,7 +1592,7 @@ def static_html_response(filename: str):
     return Response(
         versioned_static_html(html),
         media_type="text/html; charset=utf-8",
-        headers={"Cache-Control": "no-cache"},
+        headers={"Cache-Control": "no-store, must-revalidate"},
     )
 
 STATIC_PROMPT_TEMPLATE_MD = os.path.join(STATIC_DIR, "system-prompts", "infinite-canvas-prompt-templates.md")
@@ -8934,26 +8934,13 @@ async def build_chat_text_reply(payload, conversation):
 
 @app.get("/")
 async def index(request: Request):
-    """未登录返回登录页，已登录返回主页"""
-    try:
-        import auth as _auth
-        # 从 cookie 或 header 里拿 token
-        token = request.cookies.get("auth_token")
-        if not token:
-            auth_header = request.headers.get("authorization", "")
-            if auth_header.lower().startswith("bearer "):
-                token = auth_header[7:].strip()
-        user = None
-        if token:
-            payload = _auth.lookup_token(token)
-            if payload:
-                user = _auth.get_user_by_id(payload["user_id"])
-        if not user:
-            return static_html_response("login.html")
-        return static_html_response("index.html")
-    except Exception:
-        # 出错时也返回登录页（安全兜底）
-        return static_html_response("login.html")
+    """统一返回主页 index.html。未登录检查交给前端的 auth.js 处理。
+
+    这样设计的原因：浏览器 GET / 不会带 Authorization header，
+    只靠 cookie 识别登录态。如果这里检查 token 跳 login.html，
+    容易造成 login.html 与 / 之间的跳转循环。
+    """
+    return static_html_response("index.html")
 
 @app.get("/api/view")
 def view_image(filename: str, type: str = "input", subfolder: str = ""):

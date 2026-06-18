@@ -27,6 +27,14 @@
     // 全局标记已登录
     window.AUTH_TOKEN = token;
 
+    // 确保 cookie 里有 token（让 / 路由能识别登录态）
+    // 5 年有效期，SameSite=Lax
+    try {
+        if (document.cookie.indexOf('auth_token=') === -1) {
+            document.cookie = 'auth_token=' + token + '; path=/; max-age=' + (5*365*24*60*60) + '; SameSite=Lax';
+        }
+    } catch (e) {}
+
     // 给 fetch 包装一层：自动带 Authorization
     var originalFetch = window.fetch;
     window.fetch = function(url, options) {
